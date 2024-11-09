@@ -390,8 +390,8 @@ export default function UploadReel() {
       } else {
         throw new Error(data.error || "Upload failed");
       }
-    } catch (error: any) {
-      setShowError(error.message);
+    } catch (error: unknown) {
+      setShowError(error instanceof Error ? error.message : String(error));
     } finally {
       setIsUploading(false);
     }

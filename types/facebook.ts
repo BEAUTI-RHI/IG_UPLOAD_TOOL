@@ -35,3 +35,18 @@ export interface FacebookPagesResponse {
     };
   };
 }
+
+// interface FacebookAuthResponse {
+//   userID: string;
+//   expiresIn: number;
+//   accessToken: string;
+//   signedRequest: string;
+//   graphDomain: string;
+//   grantedScopes: string;
+//   data_access_expiration_time: number;
+// }
+
+// interface FacebookLoginResponse {
+//   authResponse: FacebookAuthResponse;
+//   status: "connected" | "not_authorized" | "unknown";
+// }
