@@ -1,3 +1,6 @@
+// facebook.ts
+
+// Existing interfaces that should not be changed
 export interface FacebookLoginResponse {
   authResponse: {
     accessToken: string;
@@ -35,23 +38,6 @@ export interface FacebookPagesResponse {
     };
   };
 }
-
-// interface FacebookAuthResponse {
-//   userID: string;
-//   expiresIn: number;
-//   accessToken: string;
-//   signedRequest: string;
-//   graphDomain: string;
-//   grantedScopes: string;
-//   data_access_expiration_time: number;
-// }
-
-// interface FacebookLoginResponse {
-//   authResponse: FacebookAuthResponse;
-//   status: "connected" | "not_authorized" | "unknown";
-// }
-
-// types/facebook.ts - Add these interfaces to your existing types file
 
 // New interfaces for Facebook SDK
 export interface FacebookInitParams {
@@ -91,7 +77,10 @@ export interface FacebookApiParams {
 // Method parameters
 export interface FacebookMethodParams {
   method?: "get" | "post" | "delete";
-  params?: FacebookApiParams;
+  access_token?: string;
+  fields?: string;
+  limit?: number;
+  [key: string]: string | number | boolean | undefined;
 }
 
 // Static Facebook SDK interface
@@ -105,8 +94,8 @@ export interface FacebookStatic {
 
   api<T>(
     path: string,
-    params: FacebookMethodParams,
-    callback: (response: FacebookApiResponse<T>) => void
+    params: FacebookMethodParams | ((response: FacebookApiResponse<T>) => void),
+    callback?: (response: FacebookApiResponse<T>) => void
   ): void;
 
   api<T>(

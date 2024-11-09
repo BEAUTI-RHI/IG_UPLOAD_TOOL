@@ -621,6 +621,7 @@ import { Button } from "@/components/ui/button";
 import { useInstagramAccounts } from "@/context/InstagramAccountsContext";
 import {
   FacebookLoginResponse,
+  FacebookMethodParams,
   FacebookPagesResponse,
   InstagramAccountDetails,
 } from "@/types/facebook";
@@ -676,9 +677,10 @@ export default function LoginButton({ title }: { title?: string }) {
         window.FB.api(
           `/${accountId}`,
           {
+            method: "get",
             access_token: accessToken,
             fields: "username,profile_picture_url,name",
-          },
+          } as FacebookMethodParams,
           function (response: InstagramApiResponse) {
             console.log("Instagram account details response:", response);
             if (response.error) {
@@ -736,10 +738,11 @@ export default function LoginButton({ title }: { title?: string }) {
           window.FB.api(
             "/me/accounts",
             {
+              method: "get",
               access_token: userAccessToken,
               fields: "name,access_token,instagram_business_account",
               limit: 100,
-            },
+            } as FacebookMethodParams,
             (response: FacebookPagesResponse) => {
               console.log("Raw FB pages response:", response);
               if (!response) {
