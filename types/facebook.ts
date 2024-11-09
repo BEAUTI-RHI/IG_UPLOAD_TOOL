@@ -52,6 +52,7 @@ export interface FacebookLoginOptions {
   return_scopes?: boolean;
   enable_profile_selector?: boolean;
   auth_type?: string;
+  redirect_uri?: string;
 }
 
 export interface FacebookApiError {

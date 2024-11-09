@@ -721,6 +721,7 @@ export default function LoginButton({ title }: { title?: string }) {
               return_scopes: true,
               enable_profile_selector: true,
               auth_type: "rerequest",
+              redirect_uri: `${window.location.origin}/api/auth/callback/facebook`,
             }
           );
         }
