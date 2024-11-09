@@ -60,10 +60,15 @@ export interface FacebookApiError {
   type: string;
 }
 
-// Type for API responses
+// Update FacebookApiResponse to be more flexible
 export interface FacebookApiResponse<T> {
   error?: FacebookApiError;
   data?: T;
+  // Add other common Facebook API response fields
+  id?: string;
+  name?: string;
+  username?: string;
+  profile_picture_url?: string;
 }
 
 // Parameters for API calls
@@ -83,7 +88,7 @@ export interface FacebookMethodParams {
   [key: string]: string | number | boolean | undefined;
 }
 
-// Static Facebook SDK interface
+// Update FacebookStatic interface to include specific method signatures
 export interface FacebookStatic {
   init(params: FacebookInitParams): void;
 
@@ -92,15 +97,27 @@ export interface FacebookStatic {
     options?: FacebookLoginOptions
   ): void;
 
+  // Generic API method
   api<T>(
     path: string,
-    params: FacebookMethodParams | ((response: FacebookApiResponse<T>) => void),
-    callback?: (response: FacebookApiResponse<T>) => void
+    params: FacebookMethodParams,
+    callback: (response: FacebookApiResponse<T>) => void
   ): void;
 
-  api<T>(
+  // Specific method for Instagram account details
+  api(
     path: string,
-    callback: (response: FacebookApiResponse<T>) => void
+    params: FacebookMethodParams,
+    callback: (
+      response: InstagramAccountDetails & { error?: FacebookApiError }
+    ) => void
+  ): void;
+
+  // Method for pages
+  api(
+    path: string,
+    params: FacebookMethodParams,
+    callback: (response: FacebookPagesResponse) => void
   ): void;
 
   getAuthResponse(): FacebookLoginResponse["authResponse"] | null;
