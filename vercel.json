@@ -1,0 +1,20 @@
+{
+  "functions": {
+    "app/api/reels/upload/route.ts": {
+      "maxDuration": 300,
+      "memory": 3008
+    }
+  },
+  "routes": [
+    {
+      "source": "/api/reels/upload",
+      "destination": "/api/reels/upload",
+      "methods": ["POST"],
+      "headers": {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type"
+      }
+    }
+  ]
+}
