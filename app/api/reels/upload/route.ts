@@ -230,11 +230,11 @@
 // app/api/reels/upload/route.ts
 // app/api/reels/upload/route.ts
 import { NextResponse } from "next/server";
-import { Storage } from "@google-cloud/storage";
 import {
   generateSignedUrl,
   generateReadSignedUrl,
 } from "@/utils/googleStorage";
+import { setupGoogleCredentials } from "@/utils/setupGoogleCredentials";
 import { validateVideo } from "@/utils/videoValidation";
 
 interface UploadTarget {
@@ -325,6 +325,8 @@ async function publishContainer(
 }
 
 export async function POST(request: Request) {
+  setupGoogleCredentials();
+
   try {
     console.log("Starting upload process...");
     const formData = await request.formData();
