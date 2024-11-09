@@ -1,5 +1,8 @@
 // utils/googleStorage.ts
 import { Storage, GetSignedUrlConfig } from "@google-cloud/storage";
+import { setupGoogleCredentials } from "./setupGoogleCredentials";
+
+setupGoogleCredentials();
 
 const storage = new Storage();
 const bucketName = process.env.BUCKET_NAME!;
