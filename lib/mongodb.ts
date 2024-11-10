@@ -31,9 +31,9 @@ export async function connectToDatabase() {
   }
 
   if (!cached.promise) {
-    const opts = {
-      bufferCommands: false,
-    };
+    // const opts = {
+    //   bufferCommands: false,
+    // };
 
     cached.promise = mongoose.connect(MONGODB_URI).then((mongoose) => {
       return mongoose;

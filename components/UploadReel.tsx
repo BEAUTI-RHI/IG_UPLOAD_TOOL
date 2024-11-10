@@ -1029,24 +1029,24 @@ export default function UploadReel() {
     }
   };
 
-  // Add account status display in the UI
-  const getAccountStatusText = (accountId: string) => {
-    const status = accountStatuses[accountId];
-    switch (status) {
-      case "pending":
-        return "Waiting to process";
-      case "processing":
-        return "Processing video";
-      case "ready_to_publish":
-        return "Ready to publish";
-      case "published":
-        return "Published successfully";
-      case "failed":
-        return "Failed to upload";
-      default:
-        return "Preparing";
-    }
-  };
+  // // Add account status display in the UI
+  // const getAccountStatusText = (accountId: string) => {
+  //   const status = accountStatuses[accountId];
+  //   switch (status) {
+  //     case "pending":
+  //       return "Waiting to process";
+  //     case "processing":
+  //       return "Processing video";
+  //     case "ready_to_publish":
+  //       return "Ready to publish";
+  //     case "published":
+  //       return "Published successfully";
+  //     case "failed":
+  //       return "Failed to upload";
+  //     default:
+  //       return "Preparing";
+  //   }
+  // };
 
   // Add cleanup for polling with status check
   useEffect(() => {
