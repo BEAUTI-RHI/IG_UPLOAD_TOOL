@@ -1,40 +1,41 @@
 import mongoose from "mongoose";
 
-// Correct global type declaration
-declare global {
-  let mongoose:
-    | {
-        conn: typeof mongoose | null;
-        promise: Promise<typeof mongoose> | null;
-      }
-    | undefined;
+// Define the cache interface
+interface MongooseCache {
+  conn: typeof mongoose | null;
+  promise: Promise<typeof mongoose> | null;
 }
 
-if (!process.env.MONGODB_URI) {
+// Define the global namespace augmentation
+declare global {
+  // eslint-disable-next-line no-var
+  var mongooseCache: MongooseCache | undefined;
+}
+
+const MONGODB_URI = process.env.MONGODB_URI!;
+
+if (!MONGODB_URI) {
   throw new Error("Please define the MONGODB_URI environment variable");
 }
 
-const MONGODB_URI = process.env.MONGODB_URI;
-
 // Initialize the cached connection
-const cached = global.mongoose || { conn: null, promise: null };
+const cached: MongooseCache = global.mongooseCache ?? {
+  conn: null,
+  promise: null,
+};
 
-// Assign to global
-if (!global.mongoose) {
-  global.mongoose = cached;
+// Set the global cache
+if (!global.mongooseCache) {
+  global.mongooseCache = cached;
 }
 
-export async function connectToDatabase() {
+export async function connectToDatabase(): Promise<typeof mongoose> {
   if (cached.conn) {
     console.log("Using cached connection");
     return cached.conn;
   }
 
   if (!cached.promise) {
-    // const opts = {
-    //   bufferCommands: false,
-    // };
-
     cached.promise = mongoose.connect(MONGODB_URI).then((mongoose) => {
       return mongoose;
     });
@@ -51,5 +52,4 @@ export async function connectToDatabase() {
   }
 }
 
-// Export mongoose instance
 export const db = mongoose;
