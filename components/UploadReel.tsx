@@ -636,35 +636,35 @@
 //   );
 // }
 
-////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////
+// ////////////////////////////////////////////////////////////////////////////////////////////
+// ////////////////////////////////////////////////////////////////////////////////////////////
+// ////////////////////////////////////////////////////////////////////////////////////////////
+// ////////////////////////////////////////////////////////////////////////////////////////////
+// ////////////////////////////////////////////////////////////////////////////////////////////
+// ////////////////////////////////////////////////////////////////////////////////////////////
+// ////////////////////////////////////////////////////////////////////////////////////////////
+// ////////////////////////////////////////////////////////////////////////////////////////////
+// ////////////////////////////////////////////////////////////////////////////////////////////
+// ////////////////////////////////////////////////////////////////////////////////////////////
+// ////////////////////////////////////////////////////////////////////////////////////////////
+// ////////////////////////////////////////////////////////////////////////////////////////////
+// ////////////////////////////////////////////////////////////////////////////////////////////
+// ////////////////////////////////////////////////////////////////////////////////////////////
+// ////////////////////////////////////////////////////////////////////////////////////////////
+// ////////////////////////////////////////////////////////////////////////////////////////////
+// ////////////////////////////////////////////////////////////////////////////////////////////
+// ////////////////////////////////////////////////////////////////////////////////////////////
+// ////////////////////////////////////////////////////////////////////////////////////////////
+// ////////////////////////////////////////////////////////////////////////////////////////////
+// ////////////////////////////////////////////////////////////////////////////////////////////
+// ////////////////////////////////////////////////////////////////////////////////////////////
+// ////////////////////////////////////////////////////////////////////////////////////////////
+// ////////////////////////////////////////////////////////////////////////////////////////////
+// ////////////////////////////////////////////////////////////////////////////////////////////
+// ////////////////////////////////////////////////////////////////////////////////////////////
+// ////////////////////////////////////////////////////////////////////////////////////////////
+// ////////////////////////////////////////////////////////////////////////////////////////////
+// ////////////////////////////////////////////////////////////////////////////////////////////
 
 // components/UploadReel.tsx
 "use client";
@@ -672,7 +672,7 @@
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useInstagramAccounts } from "@/context/InstagramAccountsContext";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
   CheckCircle2,
   Loader2,
@@ -706,6 +706,14 @@ export default function UploadReel() {
   >("preparing");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { accounts, selectedAccounts } = useInstagramAccounts();
+
+  const [jobId, setJobId] = useState<string | null>(null);
+  const [pollInterval, setPollInterval] = useState<NodeJS.Timeout | null>(null);
+  const [accountStatuses, setAccountStatuses] = useState<
+    Record<string, string>
+  >({});
+
+  console.log(jobId);
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
@@ -805,21 +813,52 @@ export default function UploadReel() {
     setUploadStage("preparing");
 
     try {
-      // Upload to storage first
       const videoUrl = await uploadToStorage(file);
       setUploadStage("processing");
 
-      // Create Instagram posts
       const selectedAccountsData = accounts.filter((acc) =>
         selectedAccounts.includes(acc.id)
       );
 
-      const response = await fetch("/api/reels/upload", {
+      // Log the data being sent
+      console.log("Sending data:", {
+        videoUrl,
+        caption,
+        accounts: selectedAccountsData.map((account) => ({
+          instagramAccountId: account.id,
+          username: account.username,
+          pageAccessToken: account.pageAccessToken,
+        })),
+      });
+
+      const initiateResponse = await fetch("/api/reels/initiate", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          videoUrl,
+          caption,
+          accounts: selectedAccountsData.map((account) => ({
+            instagramAccountId: account.id, // Make sure this matches
+            username: account.username,
+            pageAccessToken: account.pageAccessToken,
+          })),
+        }),
+      });
+
+      const initiateData = await initiateResponse.json();
+      if (!initiateResponse.ok) {
+        throw new Error(initiateData.error || "Failed to initiate upload");
+      }
+
+      const jobId = initiateData.jobId;
+      setJobId(jobId);
+
+      // Start the upload process
+      const uploadResponse = await fetch("/api/reels/upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jobId,
           videoUrl,
           caption,
           targets: selectedAccountsData.map((account) => ({
@@ -829,38 +868,351 @@ export default function UploadReel() {
         }),
       });
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to process video");
+      const uploadData = await uploadResponse.json();
+      if (!uploadResponse.ok) {
+        throw new Error(uploadData.error || "Failed to start upload process");
       }
 
-      if (data.success) {
-        setShowSuccess(true);
-        clearFile();
-        setCaption("");
-      } else {
-        throw new Error(data.error || "Upload failed");
-      }
+      // Start polling for status
+      const interval = setInterval(() => checkUploadStatus(jobId), 5000);
+      setPollInterval(interval);
     } catch (error: unknown) {
       setShowError(error instanceof Error ? error.message : String(error));
-    } finally {
       setIsUploading(false);
       setUploadProgress(0);
       setUploadStage("preparing");
     }
   };
 
+  const checkUploadStatus = async (id: string) => {
+    try {
+      const response = await fetch("/api/reels/status", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ jobId: id }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to check status");
+      }
+
+      // Check if job is already completed
+      if (data.status === "completed") {
+        console.log("Job already completed, stopping polling");
+        if (pollInterval) {
+          clearInterval(pollInterval);
+          setPollInterval(null);
+        }
+        setIsUploading(false);
+        setShowSuccess(true);
+        clearFile();
+        setCaption("");
+        return;
+      }
+
+      // Update account statuses
+      const newStatuses: Record<string, string> = {};
+
+      // Process each account that's ready to publish
+      await Promise.all(
+        data.accounts.map(
+          async (acc: { accountId: string; status: string }) => {
+            if (acc.status === "ready_to_publish") {
+              try {
+                const publishResponse = await fetch("/api/reels/publish", {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify({
+                    jobId: id,
+                    accountId: acc.accountId,
+                  }),
+                });
+
+                const publishData = await publishResponse.json();
+                if (publishResponse.ok) {
+                  newStatuses[acc.accountId] = "published";
+                } else {
+                  newStatuses[acc.accountId] = "failed";
+                  console.error(
+                    `Publishing failed for account ${acc.accountId}:`,
+                    publishData.error
+                  );
+                }
+              } catch (error) {
+                newStatuses[acc.accountId] = "failed";
+                console.error(
+                  `Publishing error for account ${acc.accountId}:`,
+                  error
+                );
+              }
+            } else {
+              newStatuses[acc.accountId] = acc.status;
+            }
+          }
+        )
+      );
+
+      setAccountStatuses(newStatuses);
+
+      // Calculate overall progress
+      const publishedCount = Object.values(newStatuses).filter(
+        (status) => status === "published"
+      ).length;
+
+      setUploadProgress(
+        Math.round((publishedCount / data.accounts.length) * 100)
+      );
+
+      // Check if all accounts are published
+      const allPublished = Object.values(newStatuses).every(
+        (status) => status === "published"
+      );
+
+      // Check if process is complete (all accounts either published or failed)
+      const isComplete = Object.values(newStatuses).every(
+        (status) => status === "published" || status === "failed"
+      );
+
+      if (isComplete) {
+        if (allPublished) {
+          // Update job status to completed
+          await fetch("/api/reels/updateJob", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              jobId: id,
+              status: "completed",
+            }),
+          });
+
+          // Stop polling immediately after setting status to completed
+
+          setPollInterval(null);
+          setShowSuccess(true);
+          clearFile();
+          setCaption("");
+        }
+        setIsUploading(false);
+      }
+
+      console.log(
+        `Status Update - Published: ${publishedCount}/${data.accounts.length}, Complete: ${isComplete}, Job Status: ${data.status}`
+      );
+    } catch (error) {
+      console.error("Status check error:", error);
+      setShowError(error instanceof Error ? error.message : String(error));
+      if (pollInterval) {
+        clearInterval(pollInterval);
+        setPollInterval(null);
+      }
+      setIsUploading(false);
+    }
+  };
+
+  // Update the status text function to show more detailed status
   const getUploadStatusText = () => {
     switch (uploadStage) {
       case "uploading":
-        return `Uploading video... ${uploadProgress}%`;
+        return `Uploading video to storage... ${uploadProgress}%`;
       case "processing":
-        return "Processing your reel...";
+        return `Processing reels... ${uploadProgress}%`;
       default:
         return "Preparing upload...";
     }
   };
+
+  // Add account status display in the UI
+  const getAccountStatusText = (accountId: string) => {
+    const status = accountStatuses[accountId];
+    switch (status) {
+      case "pending":
+        return "Waiting to process";
+      case "processing":
+        return "Processing video";
+      case "ready_to_publish":
+        return "Ready to publish";
+      case "published":
+        return "Published successfully";
+      case "failed":
+        return "Failed to upload";
+      default:
+        return "Preparing";
+    }
+  };
+
+  // Add cleanup for polling with status check
+  useEffect(() => {
+    // Clear existing interval when component unmounts or when polling should stop
+    return () => {
+      if (pollInterval) {
+        clearInterval(pollInterval);
+      }
+    };
+  }, [pollInterval]);
+
+  // return (
+  //   <div className="max-w-5xl mx-auto p-6 space-y-8">
+  //     {showSuccess && (
+  //       <Alert className="bg-green-50 border-green-200">
+  //         <CheckCircle2 className="h-4 w-4 text-green-600" />
+  //         <AlertTitle className="text-green-800">Upload Complete!</AlertTitle>
+  //         <AlertDescription className="text-green-700">
+  //           Your reel has been successfully uploaded to Instagram
+  //         </AlertDescription>
+  //       </Alert>
+  //     )}
+
+  //     {showError && (
+  //       <Alert variant="destructive">
+  //         <XCircle className="h-4 w-4" />
+  //         <AlertTitle>Upload Failed</AlertTitle>
+  //         <AlertDescription>{showError}</AlertDescription>
+  //       </Alert>
+  //     )}
+
+  //     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+  //       <div className="space-y-4">
+  //         <div className="border-2 border-dashed rounded-xl bg-gray-50">
+  //           {!file ? (
+  //             <div
+  //               className="flex flex-col items-center justify-center h-[400px] cursor-pointer hover:bg-gray-100 transition-colors"
+  //               onClick={() => fileInputRef.current?.click()}
+  //             >
+  //               <Upload className="h-12 w-12 text-gray-400 mb-4" />
+  //               <p className="text-sm font-medium text-gray-600">
+  //                 Click to upload or drag and drop
+  //               </p>
+  //               <p className="text-xs text-gray-500 mt-2">
+  //                 MP4 or MOV up to 100MB
+  //               </p>
+  //             </div>
+  //           ) : (
+  //             <div className="relative h-[400px] bg-black rounded-xl overflow-hidden">
+  //               <video
+  //                 src={previewUrl!}
+  //                 className="w-full h-full object-contain"
+  //                 controls
+  //                 preload="metadata"
+  //               />
+  //               <button
+  //                 onClick={clearFile}
+  //                 className="absolute top-4 right-4 p-2 bg-black/50 rounded-full hover:bg-black/70 transition-colors"
+  //               >
+  //                 <X className="h-4 w-4 text-white" />
+  //               </button>
+  //             </div>
+  //           )}
+  //           <input
+  //             ref={fileInputRef}
+  //             type="file"
+  //             accept="video/*"
+  //             onChange={handleFileSelect}
+  //             className="hidden"
+  //             disabled={isUploading}
+  //           />
+  //         </div>
+
+  //         {file && (
+  //           <div className="text-sm text-gray-600">
+  //             Selected file: {file.name}
+  //           </div>
+  //         )}
+  //       </div>
+
+  //       <div className="space-y-6">
+  //         <div className="space-y-2">
+  //           <label className="text-sm font-medium">Caption</label>
+  //           <textarea
+  //             value={caption}
+  //             onChange={(e) => setCaption(e.target.value)}
+  //             placeholder="Write a caption for your reel..."
+  //             className="w-full h-32 p-3 border rounded-lg resize-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+  //             disabled={isUploading}
+  //           />
+  //         </div>
+
+  //         {selectedAccounts.length > 0 && (
+  //           <div className="p-4 bg-gray-50 rounded-lg border">
+  //             <div className="flex items-center gap-2 mb-3">
+  //               <Instagram className="h-4 w-4" />
+  //               <span className="font-medium">Selected Accounts</span>
+  //             </div>
+  //             <div className="space-y-2">
+  //               {accounts
+  //                 .filter((acc) => selectedAccounts.includes(acc.id))
+  //                 .map((acc) => (
+  //                   <div
+  //                     key={acc.id}
+  //                     className="flex items-center gap-2 text-sm text-gray-600"
+  //                   >
+  //                     <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center">
+  //                       {acc.profilePicture ? (
+  //                         <Image
+  //                           src={acc.profilePicture}
+  //                           alt={acc.username}
+  //                           className="w-full h-full rounded-full"
+  //                           width={48}
+  //                           height={48}
+  //                         />
+  //                       ) : (
+  //                         <Instagram className="h-4 w-4" />
+  //                       )}
+  //                     </div>
+  //                     @{acc.username}
+  //                   </div>
+  //                 ))}
+  //             </div>
+  //           </div>
+  //         )}
+
+  //         <Button
+  //           onClick={handleUpload}
+  //           disabled={!file || selectedAccounts.length === 0 || isUploading}
+  //           className="w-full h-12"
+  //         >
+  //           {isUploading ? (
+  //             <span className="flex items-center gap-2">
+  //               <Loader2 className="h-5 w-5 animate-spin" />
+  //               Uploading...
+  //             </span>
+  //           ) : (
+  //             "Upload Reel"
+  //           )}
+  //         </Button>
+  //       </div>
+  //     </div>
+
+  //     {isUploading && (
+  //       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+  //         <div className="bg-white rounded-lg p-8 flex flex-col items-center gap-4 max-w-sm mx-4">
+  //           <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+  //           <p className="text-lg font-medium text-center">
+  //             {getUploadStatusText()}
+  //           </p>
+  //           {uploadStage === "uploading" && (
+  //             <div className="w-full bg-gray-200 rounded-full h-2.5">
+  //               <div
+  //                 className="bg-blue-500 h-2.5 rounded-full transition-all duration-300"
+  //                 style={{ width: `${uploadProgress}%` }}
+  //               />
+  //             </div>
+  //           )}
+  //           <p className="text-sm text-gray-500 text-center">
+  //             Please keep this window open until the upload is complete
+  //           </p>
+  //         </div>
+  //       </div>
+  //     )}
+  //   </div>
+  // );
 
   return (
     <div className="max-w-5xl mx-auto p-6 space-y-8">
@@ -883,6 +1235,7 @@ export default function UploadReel() {
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        {/* Left Column - Video Upload */}
         <div className="space-y-4">
           <div className="border-2 border-dashed rounded-xl bg-gray-50">
             {!file ? (
@@ -923,7 +1276,6 @@ export default function UploadReel() {
               disabled={isUploading}
             />
           </div>
-
           {file && (
             <div className="text-sm text-gray-600">
               Selected file: {file.name}
@@ -931,6 +1283,7 @@ export default function UploadReel() {
           )}
         </div>
 
+        {/* Right Column - Caption and Accounts */}
         <div className="space-y-6">
           <div className="space-y-2">
             <label className="text-sm font-medium">Caption</label>
@@ -949,28 +1302,47 @@ export default function UploadReel() {
                 <Instagram className="h-4 w-4" />
                 <span className="font-medium">Selected Accounts</span>
               </div>
-              <div className="space-y-2">
+              <div className="space-y-3">
                 {accounts
                   .filter((acc) => selectedAccounts.includes(acc.id))
                   .map((acc) => (
                     <div
                       key={acc.id}
-                      className="flex items-center gap-2 text-sm text-gray-600"
+                      className="flex items-center justify-between p-2 bg-white rounded-lg"
                     >
-                      <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center">
-                        {acc.profilePicture ? (
-                          <Image
-                            src={acc.profilePicture}
-                            alt={acc.username}
-                            className="w-full h-full rounded-full"
-                            width={48}
-                            height={48}
-                          />
-                        ) : (
-                          <Instagram className="h-4 w-4" />
-                        )}
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden">
+                          {acc.profilePicture ? (
+                            <Image
+                              src={acc.profilePicture}
+                              alt={acc.username}
+                              className="w-full h-full rounded-full"
+                              width={48}
+                              height={48}
+                            />
+                          ) : (
+                            <Instagram className="h-4 w-4" />
+                          )}
+                        </div>
+                        <span className="text-sm font-medium">
+                          @{acc.username}
+                        </span>
                       </div>
-                      @{acc.username}
+                      {isUploading && (
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-gray-500">
+                            {accountStatuses[acc.id] === "published" ? (
+                              <span className="text-green-600">Published</span>
+                            ) : accountStatuses[acc.id] === "failed" ? (
+                              <span className="text-red-600">Failed</span>
+                            ) : accountStatuses[acc.id] === "processing" ? (
+                              <span className="text-blue-600">Processing</span>
+                            ) : (
+                              <span className="text-gray-600">Pending</span>
+                            )}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   ))}
               </div>
@@ -994,6 +1366,7 @@ export default function UploadReel() {
         </div>
       </div>
 
+      {/* Upload Progress Modal */}
       {isUploading && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-8 flex flex-col items-center gap-4 max-w-sm mx-4">
@@ -1001,14 +1374,12 @@ export default function UploadReel() {
             <p className="text-lg font-medium text-center">
               {getUploadStatusText()}
             </p>
-            {uploadStage === "uploading" && (
-              <div className="w-full bg-gray-200 rounded-full h-2.5">
-                <div
-                  className="bg-blue-500 h-2.5 rounded-full transition-all duration-300"
-                  style={{ width: `${uploadProgress}%` }}
-                />
-              </div>
-            )}
+            <div className="w-full bg-gray-200 rounded-full h-2.5">
+              <div
+                className="bg-blue-500 h-2.5 rounded-full transition-all duration-300"
+                style={{ width: `${uploadProgress}%` }}
+              />
+            </div>
             <p className="text-sm text-gray-500 text-center">
               Please keep this window open until the upload is complete
             </p>
