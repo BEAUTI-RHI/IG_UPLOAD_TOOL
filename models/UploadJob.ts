@@ -1,16 +1,16 @@
 import mongoose, { Schema, Document } from "mongoose";
-
 export interface IAccountStatus {
   accountId: string;
   username: string;
-  pageAccessToken: string; // Added this
+  pageAccessToken: string;
   containerId?: string;
   status:
     | "pending"
     | "processing"
+    | "ready_to_publish"
     | "published"
-    | "failed"
-    | "ready_to_publish";
+    | "failed";
+  // Make sure these match exactly with the enum in AccountStatusSchema
   error?: string;
   updatedAt: Date;
 }

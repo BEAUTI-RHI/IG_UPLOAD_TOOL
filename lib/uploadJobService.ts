@@ -53,7 +53,12 @@ export const uploadJobService = {
     jobId: string,
     accountId: string,
     updates: {
-      status: "pending" | "processing" | "published" | "failed";
+      status:
+        | "pending"
+        | "processing"
+        | "ready_to_publish"
+        | "published"
+        | "failed";
       containerId?: string;
       error?: string;
     }
